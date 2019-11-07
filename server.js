@@ -1,6 +1,10 @@
 const fastify = require('fastify')({ logger: false })
 const axios = require('axios')
 const path = require('path')
+const ogs = require('open-graph-scraper');
+
+
+let attempt = 0
 
 
 fastify.register(require('fastify-rate-limit'), {
@@ -61,13 +65,26 @@ fastify.get('/snapps/:start/:limit', async(request, reply) => {
   reply.send(JSON.stringify(_res.data, null, 4))
 })
 
+fastify.get('/opengraph/:url', (request, reply) => {
+  let {url} = request.params  
+  ogs({url: 'https://' + url}, (error, res) => {    
+    console.log(res)
+    if(error){
+      reply.send(JSON.stringify({success: false}, null, 4))
+    }
+    else{
+      res.data.success = true
+      reply.send(JSON.stringify(res.data, null, 4))
+    }    
+  });
+})
 
 const rateLimit = {
   config: {
     rateLimit: {
       max: 3,
       timeWindow: '1 minute',
-      errorResponseBuilder: function(req, context) {
+      errorResponseBuilder: (req, context) => {
         return {
           code: 429,
           error: 'Too Many Requests',
@@ -78,11 +95,9 @@ const rateLimit = {
     }
   }
 }
-let attempt = 0
-
 fastify.get('/login', rateLimit, (req, reply) => {
   attempt++
-  reply.send({ login: true, attempt})
+  reply.send({attempt})
 })
 //-------------------------
 
@@ -94,6 +109,7 @@ const start = async () => {
   try {
     await fastify.listen(3000)    
     fastify.log.info(`server listening on ${fastify.server.address().port}`)
+    attempt = 0
     console.log('Starting server...')
   } catch (err) {
     fastify.log.error(err)
